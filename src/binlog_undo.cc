@@ -288,12 +288,12 @@ Result BinlogUndo::write_reverted_row(Event e)
 Result BinlogUndo::revert_row_data()
 {
   if (current_header.type_code == WRITE_ROWS_EVENT) {
-    *(Log_event_type*)(&event_buffer[EVENT_TYPE_OFFSET]) = DELETE_ROWS_EVENT;
+    event_buffer[EVENT_TYPE_OFFSET] = DELETE_ROWS_EVENT;
     rewrite_checksum(); 
   }
 
   if (current_header.type_code == DELETE_ROWS_EVENT) {
-    *(Log_event_type*)(&event_buffer[EVENT_TYPE_OFFSET]) = WRITE_ROWS_EVENT;
+    event_buffer[EVENT_TYPE_OFFSET] = WRITE_ROWS_EVENT;
     rewrite_checksum(); 
   }
   return BU_OK;
