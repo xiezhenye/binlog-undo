@@ -4,6 +4,7 @@
 using namespace binary_log;
 
 #define MAX_EVENT_SIZE 1048576
+#define MAX_TABLE_MAP_SIZE 8192
 
 typedef struct Event {
   size_t pos;
@@ -50,18 +51,24 @@ public:
   Result read_fde();
   Result read_event_header();
   Result read_event_body();
-
+  Result read_event_at(size_t pos);
+  Result read_event_header_at(size_t pos); 
   Result scan(size_t pos);
 
   Result scan_begin();
   Result scan_table_map_or_xid();
   Result scan_row();
 
+  Result read_event_data(Event e);
+  Result write_event_data(Event e);
+
   Result output();
-  Result copy_event(Event e);
-  Result revert_row_data();
-  Result write_reverted_row(Event e);
+  Result copy_event_data(Event e);
+  void revert_row_data(Table_map_event *table_map);
+  Result write_reverted_row(size_t row_pos, Table_map_event *table_map);
   void rewrite_checksum();
 };
+
+#define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 
 
