@@ -34,6 +34,16 @@ typedef enum Result {
   BU_EVENT_TOO_BIG = 6
 } Result;
 
+//unsigned long get_field_length(unsigned char **packet);
+size_t get_type_size(char type);
+
+class Bitset
+{
+  char *p;
+public:
+  Bitset(char *ptr);
+  bool get(size_t n);
+};
 
 class BinlogUndo 
 {
@@ -77,6 +87,8 @@ public:
   void calc_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
 };
 
+
+void swap(char *str, size_t first, size_t second);
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 
 

@@ -1,12 +1,12 @@
 #include <vector>
 #include <iostream>
+
 #include <stdio.h>
 #include <string.h>
 //#include <endian.h>
 
 #include "binary_log.h"
 #include "rowset.h"
-
 #include "binlog_undo.h"
 using namespace binary_log;
 
@@ -366,7 +366,7 @@ Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slic
   uint32_t bitmap_len = (*number_of_fields+7)/8;
   for (size_t i = 0; i < bitmap_len; ++i) {
     if (pos[i] != '\xff') {
-      printf("b[%d] %d\n", i, pos[i]);
+      printf("b[%ld] %d\n", i, pos[i]);
       return BU_UNEXCEPTED_EVENT_TYPE;
     }
   }
@@ -383,10 +383,68 @@ void BinlogUndo::calc_update_row(Slice data, uint32_t num_col, Table_map_event *
   if (table_map->m_colcnt != num_col) {
     return; /////
   }
+  uint32_t bitmap_len = (num_col+7)/8;
+  char *pos = data.p;
+  //printf("bits:%d\n", 0xffff&(*(short*)pos));
+  Bitset null_set(pos);
+  pos+= bitmap_len;
   for (size_t i = 0; i < num_col; ++i) {
-    printf("col: %d %d\n", i, table_map->m_coltype[i]);
+    //printf("col: %ld %d %d\n", i, table_map->m_coltype[i], null_set.get(i));
+    if (null_set.get(i)) {
+      continue;
+    }
+    size_t field_size = get_type_size(table_map->m_coltype[i]);
+    if (field_size > 0) {
+      pos+= field_size;
+    } else {
+      field_size = get_field_length((unsigned char**)(&pos)); //get_field_length will move point
+      pos+= field_size;
+    }
+  }
+  size_t len_old = pos - data.p;
+  size_t len_new = data.size - len_old;
+  printf("left: %ld\n", pos-data.p);
+  swap(data.p, len_old, len_new);
+}
+
+Bitset::Bitset(char *ptr):p(ptr){}
+
+bool Bitset::get(size_t n)
+{
+  char *ptr = p + (n / 8);
+  char v = '\x01' << (n % 8);
+  //printf("*ptr:%x v:%x ^:%x\n", 0xff&(*ptr), 0xff&v,(*ptr) & v);
+  return ((*ptr) & v) != 0;
+}
+
+size_t get_type_size(char type)
+{
+  switch(type){
+  case MYSQL_TYPE_TINY:
+    return 1;
+  case MYSQL_TYPE_SHORT:
+  case MYSQL_TYPE_YEAR:
+    return 2;
+  case MYSQL_TYPE_FLOAT:
+  case MYSQL_TYPE_LONG:
+  case MYSQL_TYPE_INT24:
+    return 4;
+  case MYSQL_TYPE_DOUBLE:
+  case MYSQL_TYPE_LONGLONG:
+    return 8;
+  default:
+    return 0;
   }
 }
 
+static char swap_buf[MAX_EVENT_SIZE];
 
+void swap(char *str, size_t first, size_t second)
+{
+  //char *swap_buf = new char[first+second];
+  memcpy(swap_buf, str, first);
+  memcpy(str, str + first, second);
+  memcpy(str + first + 1, swap_buf, first);
+  //delete tmp;
+}
 
