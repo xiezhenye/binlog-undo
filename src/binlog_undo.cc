@@ -220,11 +220,11 @@ Result BinlogUndo::output()
          row_itr != trans_itr->rows.rend();
          ++row_itr) {
       printf("row_tm: %ld %ld\n", row_itr->pos, row_itr->size);
-      result = read_event_data(*row_itr);
+      result = read_event_at(row_itr->pos);
       ASSERT_BU_OK(result);
 
       memcpy(table_map_buf, event_buffer, row_itr->size);
-      Table_map_event table_map(table_map_buf, row_itr->size, fde);
+      Table_map_event table_map(table_map_buf, current_event_len, fde);
 
       result = write_event_data(*row_itr);
       ASSERT_BU_OK(result);
@@ -288,9 +288,28 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     event_buffer[EVENT_TYPE_OFFSET] = WRITE_ROWS_EVENT;
   }
   else if (current_header.type_code == UPDATE_ROWS_EVENT) {
-    Update_rows_event update_row(event_buffer, current_header.data_written, fde);
+    Slice sl = calc_rows_body_slice();
+    //printf("sz:%ld\n", sl.size);
+    Slice dt_sl;
+    uint32_t col_num;
+    calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
+    printf("dt: %d %ld\n", col_num, dt_sl.size);
+    calc_update_row(dt_sl, col_num, table_map);
+    /*
+    Update_rows_event update_row(event_buffer, current_event_len, fde);
     Row_event_set row_set(&update_row, table_map);
-    //TODO
+    printf("update %lld %lld %ld!\n", table_map->get_table_id(), update_row.get_table_id(), update_row.get_width());
+    int i = 0;
+    for (Row_event_set::iterator row_itr = row_set.begin(); row_itr != row_set.end(); ++row_itr) {
+      uint32_t len_sum = 0;
+      Row_of_fields rof = *row_itr;
+      for (Row_of_fields::iterator v_itr = rof.begin(); v_itr != rof.end(); ++v_itr) {
+        len_sum+= (*v_itr).length();
+        printf("V: %d\n", (*v_itr).as_int32());
+      }
+      printf("sv:%d %d %ld\n", ++i, len_sum, rof.size());
+    }
+    */
   }
   rewrite_checksum(); 
   return;
@@ -306,7 +325,7 @@ Result BinlogUndo::read_event_at(size_t pos)
 Result BinlogUndo::read_event_header_at(size_t pos)
 {
   current_event_pos = pos;
-  fseek(in_fd, current_event_pos, SEEK_SET);
+  fseek(in_fd, pos, SEEK_SET);
   return read_event_header();
 }
 
@@ -320,4 +339,54 @@ void BinlogUndo::rewrite_checksum()
   checksum = htole32(checksum);  
   *(uint32_t*)(&event_buffer[current_header.data_written - BINLOG_CHECKSUM_LEN]) = checksum;
 }
+
+/**
+ * see rows_event.cpp
+ */
+Slice BinlogUndo::calc_rows_body_slice()
+{
+  Log_event_type event_type = current_header.type_code;
+  uint8_t post_header_len = fde->post_header_len[event_type - 1];
+  char *ptr_data = event_buffer + LOG_EVENT_HEADER_LEN + post_header_len;
+  if (post_header_len == Binary_log_event::ROWS_HEADER_LEN_V2) {
+    uint16_t var_header_len = *(uint16_t*)(ptr_data - 2);
+    var_header_len = le16toh(var_header_len);
+    ptr_data+= var_header_len;
+  }
+  ptr_data-= 2;
+  size_t data_size = current_event_len - (ptr_data - event_buffer);
+  return { p:ptr_data, size:data_size };
+}
+
+Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice)
+{
+  char *pos = body.p; // copy a point, as get_field_length will change it
+  *number_of_fields = (uint32_t)get_field_length((unsigned char**)&pos);
+  // number_of_fields > 4096
+  uint32_t bitmap_len = (*number_of_fields+7)/8;
+  for (size_t i = 0; i < bitmap_len; ++i) {
+    if (pos[i] != '\xff') {
+      printf("b[%d] %d\n", i, pos[i]);
+      return BU_UNEXCEPTED_EVENT_TYPE;
+    }
+  }
+  *slice = {
+    p:    pos + bitmap_len*2, 
+    size: body.size - (pos-body.p) - bitmap_len*2
+  };
+  return BU_OK;
+}
+
+
+void BinlogUndo::calc_update_row(Slice data, uint32_t num_col, Table_map_event *table_map) 
+{
+  if (table_map->m_colcnt != num_col) {
+    return; /////
+  }
+  for (size_t i = 0; i < num_col; ++i) {
+    printf("col: %d %d\n", i, table_map->m_coltype[i]);
+  }
+}
+
+
 

@@ -17,6 +17,11 @@ typedef struct Trans {
   Event xid;
 } Trans;
 
+typedef struct Slice {
+  char   *p;
+  size_t size;
+} Slice;
+
 static char magic[]= {'\xfe', '\x62', '\x69', '\x6e', '\x00'};
 
 typedef enum Result {
@@ -67,6 +72,9 @@ public:
   void revert_row_data(Table_map_event *table_map);
   Result write_reverted_row(size_t row_pos, Table_map_event *table_map);
   void rewrite_checksum();
+  Slice calc_rows_body_slice();
+  Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice);
+  void calc_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
 };
 
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}

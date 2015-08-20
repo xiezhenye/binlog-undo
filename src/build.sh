@@ -7,10 +7,10 @@ BINDINGS="${BINLOG_SRC}/bindings"
 
 INCLUDES="-I${LIB_BINLOG}/include -I${LIB_BINLOG}/export -I${BINDINGS}/include"
 
-c++ ${INCLUDES} binlog_undo.cc -c -std=c++11 -o binlog_undo.o
-c++ ${INCLUDES} main.cc -c -o main.o
+g++ ${INCLUDES} binlog_undo.cc -c -std=c++11 -o binlog_undo.o
+g++ ${INCLUDES} main.cc -c -o main.o
 
-c++ binlog_undo.o main.o \
+g++ binlog_undo.o main.o \
     "${BINLOG_SRC}/lib/libmysqlstream.a" \
     "${LIB_BINLOG}/lib/libbinlogevents.a" \
     "${LIB_MYSQL}/libmysqlclient_r.a" \
