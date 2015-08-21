@@ -8,6 +8,7 @@
 #include "binlog_undo.h"
 using namespace binary_log;
 
+
 void printhex(char *p, size_t n)
 {
   uint8_t c;
@@ -143,6 +144,7 @@ Result BinlogUndo::scan_table_map_or_xid()
 
 Result BinlogUndo::scan_row()
 {
+  // TODO: deal with multipal row events
   Result result = read_event_header();
   if (result != BU_OK) {
     return result;
