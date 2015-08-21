@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
   }
 
   printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
-  BinlogUndo undo(in_fd, out_fd);
+  BinlogUndo undo(in_fd, out_fd, max_event_size);
   int ret = undo.scan(pos);
   if (ret) {
     return ret + 10;

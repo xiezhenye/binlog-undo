@@ -18,20 +18,22 @@ void printhex(char *p, size_t n)
   putchar('\n');
 }
 
-BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd):
+BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
   in_fd(in_fd),out_fd(out_fd),
-  max_event_size(MAX_EVENT_SIZE),
+  max_event_size(max_event_size * 1048576),
   has_checksum(false),
   current_event_pos(0),
   current_event_len(0)
 {
-  event_buffer = new char[max_event_size];
+  event_buffer = new char[this->max_event_size];
+  swap_buffer = new char[this->max_event_size];
   fde = new Format_description_event(3, "");
 } 
 
 BinlogUndo::~BinlogUndo()
 {
   delete event_buffer;
+  delete swap_buffer;
   delete fde;
 }
 
@@ -76,7 +78,7 @@ Result BinlogUndo::read_fde()
 
 Result BinlogUndo::read_event_body()
 {
-  if (current_header.data_written > MAX_EVENT_SIZE) {
+  if (current_header.data_written > max_event_size) {
     return BU_EVENT_TOO_BIG;
   }
   int rest = current_header.data_written - LOG_EVENT_HEADER_LEN; 
@@ -419,14 +421,12 @@ size_t get_type_size(char type)
   //TODO: add all other types for safety
 }
 
-static char swap_buf[MAX_EVENT_SIZE];
-
-void swap(char *str, size_t first, size_t second)
+void BinlogUndo::swap(char *str, size_t first, size_t second)
 {
   //char *swap_buf = new char[first+second];
-  memcpy(swap_buf, str, first + second);
-  memcpy(str, swap_buf + first, second);
-  memcpy(str + second, swap_buf, first);
+  memcpy(swap_buffer, str, first + second);
+  memcpy(str, swap_buffer + first, second);
+  memcpy(str + second, swap_buffer, first);
   //delete tmp;
 }
 

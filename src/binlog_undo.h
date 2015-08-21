@@ -3,8 +3,7 @@
 
 using namespace binary_log;
 
-#define MAX_EVENT_SIZE 1048576
-#define MAX_TABLE_MAP_SIZE 8192
+#define MAX_TABLE_MAP_SIZE 65536
 
 typedef struct Event {
   size_t pos;
@@ -50,9 +49,11 @@ class BinlogUndo
 public:
   FILE *in_fd;
   FILE *out_fd;
+  size_t max_event_size;
+  
   char *event_buffer;
+  char *swap_buffer;
   Format_description_event *fde = NULL;
-  int max_event_size;
   bool has_checksum;
   Log_event_header current_header;
   size_t current_event_pos;
@@ -60,7 +61,7 @@ public:
   std::vector<Trans> transactions;
 
 public:  
-  BinlogUndo(FILE *in_fd, FILE *out_fd);
+  BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size);
   ~BinlogUndo();
 
   Result read_fde();
@@ -85,10 +86,10 @@ public:
   Slice calc_rows_body_slice();
   Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice);
   void calc_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
+  void swap(char *str, size_t first, size_t second);
 };
 
 
-void swap(char *str, size_t first, size_t second);
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 
 
