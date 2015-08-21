@@ -1,6 +1,11 @@
 #include <vector>
 #include "binary_log.h"
 
+namespace binary_log 
+{
+  unsigned long get_field_length(unsigned char **packet);
+}
+
 using namespace binary_log;
 
 #define MAX_TABLE_MAP_SIZE 65536
@@ -87,7 +92,6 @@ public:
   void swap_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
   void swap(char *str, size_t first, size_t second);
 };
-
 
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 
