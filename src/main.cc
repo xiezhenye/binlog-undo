@@ -7,6 +7,28 @@ namespace po = boost::program_options;
 
 using namespace binary_log;
 
+void print_error_msg(Result result)
+{
+  switch (result) {
+  case BU_IO_ERROR:
+    fprintf(stderr, "io error\n");
+    break;
+  case BU_CORRUPT_EVENT:
+    fprintf(stderr, "binlog event is corrupt\n");
+    break;
+  case BU_UNEXCEPTED_EVENT_TYPE:
+    fprintf(stderr, "meet unexepted binlog event type\n");
+    break;
+  case BU_EVENT_TOO_BIG:
+    fprintf(stderr, "binlog event too big\n");
+    break;
+  default:
+    fprintf(stderr, "unknown error\n");
+    break;
+  }
+}
+
+
 int main(int argc, char** argv) {
   std::string in_path;
   std::string out_path;
@@ -44,14 +66,16 @@ int main(int argc, char** argv) {
     return 3;
   }
 
-  printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
+  //printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
   BinlogUndo undo(in_fd, out_fd, max_event_size);
-  int ret = undo.scan(pos);
+  Result ret = undo.scan(pos);
   if (ret) {
+    print_error_msg(ret);
     return ret + 10;
   }
   ret = undo.output();
   if (ret) {
+    print_error_msg(ret);
     return ret + 10;
   }
 
