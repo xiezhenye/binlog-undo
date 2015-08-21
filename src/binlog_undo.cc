@@ -227,8 +227,16 @@ Result BinlogUndo::output()
       result = write_event_data(*row_itr);
       ASSERT_BU_OK(result);
       size_t row_pos = row_itr->pos + row_itr->size;
-      result = write_reverted_row(row_pos, &table_map);
-      ASSERT_BU_OK(result);
+      do {
+        result = read_event_at(row_pos);
+        ASSERT_BU_OK(result);
+        revert_row_data(&table_map);
+        result = write_event_data({ 
+          row_pos, 
+          current_header.data_written
+        });
+        ASSERT_BU_OK(result);
+      } while(current_header.log_pos < trans_itr->xid.pos);
     }
     //printf("xid: %ld %ld\n", trans_itr->xid.pos, trans_itr->xid.size);
     result = copy_event_data(trans_itr->xid);
@@ -263,20 +271,6 @@ Result BinlogUndo::copy_event_data(Event e)
   return write_event_data(e);
 }
 
-/**
- * Event e is the Table_map event before the row event
- */
-Result BinlogUndo::write_reverted_row(size_t row_pos, Table_map_event *table_map)
-{
-  Result result = read_event_at(row_pos);
-  ASSERT_BU_OK(result);
-  revert_row_data(table_map);
-  return write_event_data({ 
-    row_pos, 
-    current_header.data_written
-  });
-}
-
 void BinlogUndo::revert_row_data(Table_map_event *table_map)
 {
   if (current_header.type_code == WRITE_ROWS_EVENT) {
@@ -292,7 +286,7 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     uint32_t col_num;
     calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
     //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
-    calc_update_row(dt_sl, col_num, table_map);
+    swap_update_row(dt_sl, col_num, table_map);
   }
   rewrite_checksum(); 
   return;
@@ -361,7 +355,7 @@ Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slic
 }
 
 
-void BinlogUndo::calc_update_row(Slice data, uint32_t num_col, Table_map_event *table_map) 
+void BinlogUndo::swap_update_row(Slice data, uint32_t num_col, Table_map_event *table_map) 
 {
   if (table_map->m_colcnt != num_col) {
     return; /////
@@ -388,6 +382,13 @@ void BinlogUndo::calc_update_row(Slice data, uint32_t num_col, Table_map_event *
   //printf("left: %ld; right: %ld\n", len_old, len_new);
   swap(data.p, len_old, len_new);
   //printhex(data.p, data.size);
+}
+
+void BinlogUndo::swap(char *str, size_t first, size_t second)
+{
+  memcpy(swap_buffer, str, first);
+  memcpy(str, str + first, second);
+  memcpy(str + second, swap_buffer, first);
 }
 
 Bitset::Bitset(char *ptr):p(ptr){}
@@ -419,14 +420,5 @@ size_t get_type_size(char type)
     return 0;
   }
   //TODO: add all other types for safety
-}
-
-void BinlogUndo::swap(char *str, size_t first, size_t second)
-{
-  //char *swap_buf = new char[first+second];
-  memcpy(swap_buffer, str, first + second);
-  memcpy(str, swap_buffer + first, second);
-  memcpy(str + second, swap_buffer, first);
-  //delete tmp;
 }
 
