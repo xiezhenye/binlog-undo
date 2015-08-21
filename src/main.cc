@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
   }
 
   fclose(in_fd);
-  
+  fclose(out_fd);  
   return ret;
 }
 
