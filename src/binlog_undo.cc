@@ -4,7 +4,6 @@
 #include <string.h>
 //#include <endian.h>
 
-#include "binary_log.h"
 #include "binlog_undo.h"
 using namespace binary_log;
 
@@ -23,11 +22,11 @@ BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
   max_event_size(max_event_size * 1048576),
   has_checksum(false),
   current_event_pos(0),
-  current_event_len(0)
+  current_event_len(0),
+  fde(NULL)
 {
   event_buffer = new char[this->max_event_size];
   swap_buffer = new char[this->max_event_size];
-  fde = new Format_description_event(3, "");
 } 
 
 BinlogUndo::~BinlogUndo()
@@ -68,11 +67,12 @@ Result BinlogUndo::read_fde()
   //printf("%d %lu %lld\n", current_header.type_code, current_header.data_written, current_header.log_pos);
   Result result = read_event_body();
   ASSERT_BU_OK(result);
-  Format_description_event *tmp = fde;
+  //Format_description_event *tmp = de;
+  Format_description_event *tmp = new Format_description_event(3, "");
   fde = new Format_description_event(event_buffer, current_header.data_written, tmp);
-  delete tmp;
   fde->footer()->checksum_alg = fde->footer()->get_checksum_alg(event_buffer, current_header.data_written);
   has_checksum = (fde->footer()->checksum_alg == BINLOG_CHECKSUM_ALG_CRC32);
+  delete tmp;
   return BU_OK;
 }
 

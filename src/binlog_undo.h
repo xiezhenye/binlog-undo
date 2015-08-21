@@ -1,4 +1,5 @@
 #include <vector>
+#define STANDALONE_BINLOG
 #include "binary_log.h"
 
 namespace binary_log 
