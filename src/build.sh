@@ -14,5 +14,6 @@ g++ binlog_undo.o main.o \
     "${BINLOG_SRC}/lib/libmysqlstream.a" \
     "${LIB_BINLOG}/lib/libbinlogevents.a" \
     "${LIB_MYSQL}/libmysqlclient_r.a" \
+    -lboost_program_options \
     -o binlog_undo 
 
