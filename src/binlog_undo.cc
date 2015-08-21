@@ -1,14 +1,21 @@
 #include <vector>
-#include <iostream>
 
 #include <stdio.h>
 #include <string.h>
 //#include <endian.h>
 
 #include "binary_log.h"
-#include "rowset.h"
 #include "binlog_undo.h"
 using namespace binary_log;
+
+void printhex(char *p, size_t n)
+{
+  uint8_t c;
+  for (size_t i = 0; i < n; ++i) {
+    printf("%02x ", (uint8_t)(p[i]));
+  }
+  putchar('\n');
+}
 
 BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd):
   in_fd(in_fd),out_fd(out_fd),
@@ -182,19 +189,6 @@ Result BinlogUndo::scan(size_t pos)
       ASSERT_BU_OK(result);
     } // rows
   } // transactions
-  /*
-  for (std::vector<Trans>::iterator trans_itr = transactions.begin(); 
-       trans_itr != transactions.end();
-       ++trans_itr) {
-    printf("begin: %ld\n", trans_itr->begin);
-    for (std::vector<size_t>::iterator row_itr = trans_itr->rows.begin();
-         row_itr != trans_itr->rows.end();
-         ++row_itr) {
-      printf("row_tm: %ld\n", *row_itr);
-    }
-    printf("xid: %ld\n", trans_itr->xid);
-  }
-  */
   return BU_OK;
 }
 
@@ -211,7 +205,7 @@ Result BinlogUndo::output()
   for (std::vector<Trans>::reverse_iterator trans_itr = transactions.rbegin();
        trans_itr != transactions.rend();
        ++trans_itr) {
-    printf("begin: %ld %ld\n", trans_itr->begin.pos, trans_itr->begin.size);
+    //printf("begin: %ld %ld\n", trans_itr->begin.pos, trans_itr->begin.size);
     result = copy_event_data(trans_itr->begin);
     if (result != BU_OK) {
       return result;
@@ -219,7 +213,7 @@ Result BinlogUndo::output()
     for (std::vector<Event>::reverse_iterator row_itr = trans_itr->rows.rbegin();
          row_itr != trans_itr->rows.rend();
          ++row_itr) {
-      printf("row_tm: %ld %ld\n", row_itr->pos, row_itr->size);
+      //printf("row_tm: %ld %ld\n", row_itr->pos, row_itr->size);
       result = read_event_at(row_itr->pos);
       ASSERT_BU_OK(result);
 
@@ -232,7 +226,7 @@ Result BinlogUndo::output()
       result = write_reverted_row(row_pos, &table_map);
       ASSERT_BU_OK(result);
     }
-    printf("xid: %ld %ld\n", trans_itr->xid.pos, trans_itr->xid.size);
+    //printf("xid: %ld %ld\n", trans_itr->xid.pos, trans_itr->xid.size);
     result = copy_event_data(trans_itr->xid);
     ASSERT_BU_OK(result);
   }
@@ -293,23 +287,8 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     Slice dt_sl;
     uint32_t col_num;
     calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
-    printf("dt: %d %ld\n", col_num, dt_sl.size);
+    //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
     calc_update_row(dt_sl, col_num, table_map);
-    /*
-    Update_rows_event update_row(event_buffer, current_event_len, fde);
-    Row_event_set row_set(&update_row, table_map);
-    printf("update %lld %lld %ld!\n", table_map->get_table_id(), update_row.get_table_id(), update_row.get_width());
-    int i = 0;
-    for (Row_event_set::iterator row_itr = row_set.begin(); row_itr != row_set.end(); ++row_itr) {
-      uint32_t len_sum = 0;
-      Row_of_fields rof = *row_itr;
-      for (Row_of_fields::iterator v_itr = rof.begin(); v_itr != rof.end(); ++v_itr) {
-        len_sum+= (*v_itr).length();
-        printf("V: %d\n", (*v_itr).as_int32());
-      }
-      printf("sv:%d %d %ld\n", ++i, len_sum, rof.size());
-    }
-    */
   }
   rewrite_checksum(); 
   return;
@@ -366,7 +345,7 @@ Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slic
   uint32_t bitmap_len = (*number_of_fields+7)/8;
   for (size_t i = 0; i < bitmap_len; ++i) {
     if (pos[i] != '\xff') {
-      printf("b[%ld] %d\n", i, pos[i]);
+      //printf("b[%ld] %d\n", i, pos[i])
       return BU_UNEXCEPTED_EVENT_TYPE;
     }
   }
@@ -383,28 +362,28 @@ void BinlogUndo::calc_update_row(Slice data, uint32_t num_col, Table_map_event *
   if (table_map->m_colcnt != num_col) {
     return; /////
   }
+  //printhex(data.p, data.size);
   uint32_t bitmap_len = (num_col+7)/8;
   char *pos = data.p;
   //printf("bits:%d\n", 0xffff&(*(short*)pos));
   Bitset null_set(pos);
   pos+= bitmap_len;
   for (size_t i = 0; i < num_col; ++i) {
-    //printf("col: %ld %d %d\n", i, table_map->m_coltype[i], null_set.get(i));
     if (null_set.get(i)) {
       continue;
     }
+    //printf("col: %ld %d %d\n", i, table_map->m_coltype[i], null_set.get(i));
     size_t field_size = get_type_size(table_map->m_coltype[i]);
-    if (field_size > 0) {
-      pos+= field_size;
-    } else {
-      field_size = get_field_length((unsigned char**)(&pos)); //get_field_length will move point
-      pos+= field_size;
+    if (field_size == 0) {
+      field_size = get_field_length((unsigned char**)(&pos)); //get_field_length will move the point to the posision after the leint.
     }
+    pos+= field_size;
   }
   size_t len_old = pos - data.p;
   size_t len_new = data.size - len_old;
-  printf("left: %ld\n", pos-data.p);
+  //printf("left: %ld; right: %ld\n", len_old, len_new);
   swap(data.p, len_old, len_new);
+  //printhex(data.p, data.size);
 }
 
 Bitset::Bitset(char *ptr):p(ptr){}
@@ -435,6 +414,7 @@ size_t get_type_size(char type)
   default:
     return 0;
   }
+  //TODO: add all other types for safety
 }
 
 static char swap_buf[MAX_EVENT_SIZE];
@@ -442,9 +422,9 @@ static char swap_buf[MAX_EVENT_SIZE];
 void swap(char *str, size_t first, size_t second)
 {
   //char *swap_buf = new char[first+second];
-  memcpy(swap_buf, str, first);
-  memcpy(str, str + first, second);
-  memcpy(str + first + 1, swap_buf, first);
+  memcpy(swap_buf, str, first + second);
+  memcpy(str, swap_buf + first, second);
+  memcpy(str + second, swap_buf, first);
   //delete tmp;
 }
 
