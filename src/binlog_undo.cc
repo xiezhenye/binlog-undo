@@ -231,7 +231,8 @@ Result BinlogUndo::output()
         }
         result = read_event_body();
         ASSERT_BU_OK(result);
-        revert_row_data(&table_map);
+        result = revert_row_data(&table_map);
+        ASSERT_BU_OK(result);
         result = write_event_data({ 
           row_pos, 
           current_header.data_written
@@ -271,7 +272,7 @@ Result BinlogUndo::copy_event_data(Event e)
   return write_event_data(e);
 }
 
-void BinlogUndo::revert_row_data(Table_map_event *table_map)
+Result BinlogUndo::revert_row_data(Table_map_event *table_map)
 {
   if (current_header.type_code == WRITE_ROWS_EVENT) {
     event_buffer[EVENT_TYPE_OFFSET] = DELETE_ROWS_EVENT;
@@ -284,16 +285,17 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     //printf("sz:%ld\n", sl.size);
     Slice dt_sl;
     uint32_t col_num;
-    calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
+    Result result = calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
+    ASSERT_BU_OK(result);
     //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
     swap_update_row(dt_sl, col_num, table_map);
   }
   else {
-    //printf("XXXXXX!!!!!!!\n");
+    return BU_UNEXCEPTED_EVENT_TYPE;
   }
   rewrite_server_id();
   rewrite_checksum(); 
-  return;
+  return BU_OK;
 }
 
 Result BinlogUndo::read_event_at(size_t pos)

@@ -89,7 +89,7 @@ public:
 
   Result output();
   Result copy_event_data(Event e);
-  void revert_row_data(Table_map_event *table_map);
+  Result revert_row_data(Table_map_event *table_map);
   void rewrite_checksum();
   Slice calc_rows_body_slice();
   Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice);
