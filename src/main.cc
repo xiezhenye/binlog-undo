@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
   std::string out_path;
   size_t pos;
   size_t max_event_size;
-
+  uint32_t server_id = UINT_MAX;
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help,h", "print help message")
@@ -42,6 +42,7 @@ int main(int argc, char** argv) {
     ("position,p", po::value<size_t>(&pos)->required(), "position")
     ("output,o", po::value<std::string>(&out_path)->required(), "output file")
     ("max-event-size,m", po::value<size_t>(&max_event_size)->default_value(16), "max binlog event size (MB)")
+    ("server-id,s", po::value<uint32_t>(&server_id), "rewrite the specialized server id");
     ;
 	
   po::variables_map vm;
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
 
   //printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
   BinlogUndo undo(in_fd, out_fd, max_event_size);
+  undo.set_server_id(server_id);
   Result ret = undo.scan(pos);
   if (ret) {
     print_error_msg(ret);

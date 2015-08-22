@@ -58,12 +58,15 @@ public:
   size_t max_event_size;
   
   char *event_buffer;
-  char *swap_buffer;
+  //char *swap_buffer;
   Format_description_event *fde = NULL;
   bool has_checksum;
-  Log_event_header current_header;
+  bool is_rewrite_server_id = false;
+  uint32_t server_id = 0;
   size_t current_event_pos;
   size_t current_event_len;
+  Log_event_header current_header;
+
   std::vector<Trans> transactions;
 
 public:  
@@ -92,6 +95,9 @@ public:
   Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice);
   void swap_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
   void swap(char *str, size_t first, size_t second);
+
+  void set_server_id(uint32_t server_id);
+  void rewrite_server_id();
 };
 
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}

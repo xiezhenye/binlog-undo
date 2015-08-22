@@ -26,13 +26,13 @@ BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
   fde(NULL)
 {
   event_buffer = new char[this->max_event_size];
-  swap_buffer = new char[this->max_event_size];
+  //swap_buffer = new char[this->max_event_size];
 } 
 
 BinlogUndo::~BinlogUndo()
 {
   delete event_buffer;
-  delete swap_buffer;
+  //delete swap_buffer;
   delete fde;
 }
 
@@ -247,16 +247,21 @@ Result BinlogUndo::output()
 
 Result BinlogUndo::read_event_data(Event e)
 {
+  return read_event_at(e.pos);
+  /*
   fseek(in_fd, e.pos, SEEK_SET);
   int n = fread(event_buffer, sizeof(char), e.size, in_fd);
   if (n != e.size) {
     return BU_IO_ERROR;
   }
   return BU_OK;
+  */
 }
 
 Result BinlogUndo::write_event_data(Event e)
 {
+  rewrite_server_id();
+  rewrite_checksum(); 
   int n = fwrite(event_buffer, sizeof(char), e.size, out_fd);
   if (n != e.size) {
     return BU_IO_ERROR;
@@ -288,6 +293,7 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
     swap_update_row(dt_sl, col_num, table_map);
   }
+  rewrite_server_id();
   rewrite_checksum(); 
   return;
 }
@@ -315,6 +321,14 @@ void BinlogUndo::rewrite_checksum()
                        current_header.data_written - BINLOG_CHECKSUM_LEN);
   checksum = htole32(checksum);  
   *(uint32_t*)(&event_buffer[current_header.data_written - BINLOG_CHECKSUM_LEN]) = checksum;
+}
+
+void BinlogUndo::rewrite_server_id()
+{
+  if (!is_rewrite_server_id) {
+    return;
+  }
+  *(uint32_t*)(event_buffer + SERVER_ID_OFFSET) = server_id;
 }
 
 /**
@@ -386,9 +400,41 @@ void BinlogUndo::swap_update_row(Slice data, uint32_t num_col, Table_map_event *
 
 void BinlogUndo::swap(char *str, size_t first, size_t second)
 {
-  memcpy(swap_buffer, str, first);
-  memcpy(str, str + first, second);
-  memcpy(str + second, swap_buffer, first);
+  //printhex(str, first+second);
+  //memcpy(swap_buffer, str, first);
+  //memcpy(str, str + first, second);
+  //memcpy(str + second, swap_buffer, first);
+  size_t gcd;
+  size_t a = first, b = second, c = 0;
+  size_t len = first+second;
+  while ( a != 0 ) {
+     c = a; a = b%a;  b = c;
+  }
+  gcd = b;
+  char t1, t2;
+  int step = len/gcd;
+  for (int i = 0; i < gcd; ++i) {
+    int p1 = i;
+    t1 = str[p1];
+    for (int j = 0; j < step; ++j) {
+      int p2 = p1 + second;
+      if (p2 >= len) {
+        p2-= len;
+      }
+      t2 = str[p2];
+      str[p2] = t1;
+      t1 = t2;
+      p1 = p2;
+    }
+  }
+  //printhex(str, first+second);
+}
+
+void BinlogUndo::set_server_id(uint32_t server_id)
+{
+  //printf("%d\n", server_id);
+  is_rewrite_server_id = (server_id != UINT32_MAX);
+  this->server_id = server_id; 
 }
 
 Bitset::Bitset(char *ptr):p(ptr){}
