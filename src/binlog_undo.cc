@@ -95,6 +95,10 @@ Result BinlogUndo::scan_begin()
   Result result;
   result = read_event_header();
   ASSERT_BU_OK(result);
+  if (current_header.type_code == GTID_LOG_EVENT) {
+    result = read_event_header_at(current_header.log_pos);
+    ASSERT_BU_OK(result);
+  }
   if (current_header.type_code != QUERY_EVENT || current_header.data_written > 100) { // much bigger than begin event(79)
     return BU_UNEXCEPTED_EVENT_TYPE;
   }
