@@ -119,54 +119,43 @@ Result BinlogUndo::scan_begin()
   return BU_OK;
 }
 
-Result BinlogUndo::scan_table_map_or_xid()
+Result BinlogUndo::scan_row_or_xid()
 {
+  // TODO: deal with multipal row events
   Result result = read_event_header();
   ASSERT_BU_OK(result);
-  if (current_header.type_code == TABLE_MAP_EVENT) {
+
+  switch (current_header.type_code) {
+  case TABLE_MAP_EVENT:
     if (current_header.data_written > MAX_TABLE_MAP_SIZE) {
       return BU_EVENT_TOO_BIG;
     }
-    result = BU_OK;
     //printf("TABLE_MAP\n");
     transactions.back().rows.push_back({
       current_event_pos,
       current_header.data_written
     });
-  } else if (current_header.type_code == XID_EVENT) {
+    break;
+  case WRITE_ROWS_EVENT:
+  case UPDATE_ROWS_EVENT:
+  case DELETE_ROWS_EVENT:
+  case ROWS_QUERY_LOG_EVENT:
+    //printf("ROW\n");
+    break;
+  case XID_EVENT:
+    //printf("XID\n");
     result = BU_END_TRANSACTION;
     transactions.back().xid = {
       current_event_pos,
       current_header.data_written
     };
-    //printf("XID\n");
-  } else {
-    return BU_UNEXCEPTED_EVENT_TYPE;
-  }
-  current_event_pos = current_header.log_pos;
-  fseek(in_fd, current_event_pos, SEEK_SET); 
-  return result;
-}
-
-Result BinlogUndo::scan_row()
-{
-  // TODO: deal with multipal row events
-  Result result = read_event_header();
-  if (result != BU_OK) {
-    return result;
-  }
-  switch (current_header.type_code) {
-  case WRITE_ROWS_EVENT:
-  case UPDATE_ROWS_EVENT:
-  case DELETE_ROWS_EVENT:
-    //printf("ROW\n");
     break;
   default:
     return BU_UNEXCEPTED_EVENT_TYPE;
   }
   current_event_pos = current_header.log_pos;
   fseek(in_fd, current_event_pos, SEEK_SET); 
-  return BU_OK; 
+  return result; 
 }
 
 Result BinlogUndo::scan(size_t pos)
@@ -188,12 +177,10 @@ Result BinlogUndo::scan(size_t pos)
       return result;
     }
     while (true) {
-      result = scan_table_map_or_xid();
+      result = scan_row_or_xid();
       if (result == BU_END_TRANSACTION) {
         break;
       }
-      ASSERT_BU_OK(result);   
-      result = scan_row();
       ASSERT_BU_OK(result);
     } // rows
   } // transactions
@@ -218,8 +205,9 @@ Result BinlogUndo::output()
     if (result != BU_OK) {
       return result;
     }
-    for (std::vector<Event>::reverse_iterator row_itr = trans_itr->rows.rbegin();
-         row_itr != trans_itr->rows.rend();
+    //printf("rs %d\n", trans_itr->rows.size());
+    for (std::vector<Event>::iterator row_itr = trans_itr->rows.begin();
+         row_itr != trans_itr->rows.end();
          ++row_itr) {
       //printf("row_tm: %ld %ld\n", row_itr->pos, row_itr->size);
       result = read_event_at(row_itr->pos);
@@ -230,9 +218,18 @@ Result BinlogUndo::output()
 
       result = write_event_data(*row_itr);
       ASSERT_BU_OK(result);
-      size_t row_pos = row_itr->pos + row_itr->size;
+      size_t row_pos = current_header.log_pos;
       do {
-        result = read_event_at(row_pos);
+        result = read_event_header_at(row_pos);
+        ASSERT_BU_OK(result);
+        if (current_header.type_code == ROWS_QUERY_LOG_EVENT) {
+          row_pos = current_header.log_pos; 
+          continue;
+        }
+        if (current_header.type_code == TABLE_MAP_EVENT) {
+          break;
+        }
+        result = read_event_body();
         ASSERT_BU_OK(result);
         revert_row_data(&table_map);
         result = write_event_data({ 
@@ -240,7 +237,9 @@ Result BinlogUndo::output()
           current_header.data_written
         });
         ASSERT_BU_OK(result);
-      } while(current_header.log_pos < trans_itr->xid.pos);
+        row_pos = current_header.log_pos; 
+        //printf("%ld %ld\n", row_pos, trans_itr->xid.pos);
+      } while(row_pos < trans_itr->xid.pos);
     }
     //printf("xid: %ld %ld\n", trans_itr->xid.pos, trans_itr->xid.size);
     result = copy_event_data(trans_itr->xid);
@@ -252,14 +251,6 @@ Result BinlogUndo::output()
 Result BinlogUndo::read_event_data(Event e)
 {
   return read_event_at(e.pos);
-  /*
-  fseek(in_fd, e.pos, SEEK_SET);
-  int n = fread(event_buffer, sizeof(char), e.size, in_fd);
-  if (n != e.size) {
-    return BU_IO_ERROR;
-  }
-  return BU_OK;
-  */
 }
 
 Result BinlogUndo::write_event_data(Event e)
@@ -296,6 +287,9 @@ void BinlogUndo::revert_row_data(Table_map_event *table_map)
     calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
     //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
     swap_update_row(dt_sl, col_num, table_map);
+  }
+  else {
+    //printf("XXXXXX!!!!!!!\n");
   }
   rewrite_server_id();
   rewrite_checksum(); 

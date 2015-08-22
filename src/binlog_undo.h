@@ -81,8 +81,8 @@ public:
   Result scan(size_t pos);
 
   Result scan_begin();
-  Result scan_table_map_or_xid();
-  Result scan_row();
+  Result scan_table_map();
+  Result scan_row_or_xid();
 
   Result read_event_data(Event e);
   Result write_event_data(Event e);
