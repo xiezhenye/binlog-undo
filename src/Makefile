@@ -2,7 +2,7 @@ MYSQL_SRC=/root/mysql-5.7.8-rc
 
 LIB_MYSQL=$(MYSQL_SRC)/libmysql
 LIB_BINLOG=$(MYSQL_SRC)/libbinlogevents
-INCLUDES=-I$(MYSQL_SRC)/include -I$(LIB_BINLOG)/include -I$(LIB_BINLOG)/export
+INCLUDES=-I$(LIB_BINLOG)/include -I$(LIB_BINLOG)/export
 
 LIBBINLOGSTANDALONE=$(MYSQL_SRC)/libbinlogstandalone/lib/libbinlogstandalone.a
 LIBMYSQLCLIENT=$(LIB_MYSQL)/libmysqlclient.a

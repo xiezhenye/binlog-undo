@@ -206,8 +206,8 @@ Result BinlogUndo::output()
       return result;
     }
     //printf("rs %d\n", trans_itr->rows.size());
-    for (std::vector<Event>::iterator row_itr = trans_itr->rows.begin();
-         row_itr != trans_itr->rows.end();
+    for (std::vector<Event>::reverse_iterator row_itr = trans_itr->rows.rbegin();
+         row_itr != trans_itr->rows.rend();
          ++row_itr) {
       //printf("row_tm: %ld %ld\n", row_itr->pos, row_itr->size);
       result = read_event_at(row_itr->pos);
@@ -285,10 +285,11 @@ Result BinlogUndo::revert_row_data(Table_map_event *table_map)
     //printf("sz:%ld\n", sl.size);
     Slice dt_sl;
     uint32_t col_num;
-    Result result = calc_update_data(sl, &col_num, &dt_sl); //TODO: check result
+    Slice mp_sl;
+    Result result = calc_update_data(sl, &col_num, &mp_sl, &dt_sl);
     ASSERT_BU_OK(result);
     //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
-    swap_update_row(dt_sl, col_num, table_map);
+    swap_update_row(mp_sl, dt_sl, col_num, table_map);
   }
   else {
     return BU_UNEXCEPTED_EVENT_TYPE;
@@ -349,19 +350,21 @@ Slice BinlogUndo::calc_rows_body_slice()
   return { p:ptr_data, size:data_size };
 }
 
-Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice)
+Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice)
 {
   char *pos = body.p; // copy a point, as get_field_length will change it
   *number_of_fields = (uint32_t)get_field_length((unsigned char**)&pos);
   // number_of_fields > 4096
   uint32_t bitmap_len = (*number_of_fields+7)/8;
-  for (size_t i = 0; i < bitmap_len; ++i) {
+   
+  for (size_t i = 0; i < bitmap_len*2; ++i) {
     if (pos[i] != '\xff') {
-      //printf("b[%ld] %d\n", i, pos[i])
-      return BU_UNEXCEPTED_EVENT_TYPE;
+      //printf("b[%ld] %d\n", i, pos[i]);
+      return BU_NOT_FULL_ROW_IMAGE;
     }
   }
-  *slice = {
+  *field_bitset_slice = { p: pos, size: bitmap_len };
+  *data_slice = {
     p:    pos + bitmap_len*2, 
     size: body.size - (pos-body.p) - bitmap_len*2
   };
@@ -369,22 +372,35 @@ Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slic
 }
 
 
-void BinlogUndo::swap_update_row(Slice data, uint32_t num_col, Table_map_event *table_map) 
+void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map) 
 {
   if (table_map->m_colcnt != num_col) {
     return; /////
   }
   //printhex(data.p, data.size);
-  uint32_t bitmap_len = (num_col+7)/8;
   char *pos = data.p;
   //printf("bits:%d\n", 0xffff&(*(short*)pos));
+  Bitset present_set(present.p);
+  int present_bitmap_len = (num_col+7)/8; 
   Bitset null_set(pos);
-  pos+= bitmap_len;
-  for (size_t i = 0; i < num_col; ++i) {
-    if (null_set.get(i)) {
+  int null_bit_num = 0;
+  for (int i = 0; i < num_col; ++i) {
+    if (present_set.get(i)) {
+      ++null_bit_num;
+    }
+  }
+  //uint32_t bitmap_len = (num_col+7)/8;
+  pos+= (null_bit_num+7)/8;
+  int null_i = -1;
+  for (int i = 0; i < num_col; ++i) {
+    //printf("col: %d %d %d\n", i, table_map->m_coltype[i], present_set.get(i));
+    if (!present_set.get(i)) {
       continue;
     }
-    //printf("col: %ld %d %d\n", i, table_map->m_coltype[i], null_set.get(i));
+    ++null_i;
+    if (null_set.get(null_i)) {
+      continue;
+    }
     size_t field_size = get_type_size(table_map->m_coltype[i]);
     if (field_size == 0) {
       field_size = get_field_length((unsigned char**)(&pos)); //get_field_length will move the point to the posision after the leint.
@@ -394,6 +410,7 @@ void BinlogUndo::swap_update_row(Slice data, uint32_t num_col, Table_map_event *
   size_t len_old = pos - data.p;
   size_t len_new = data.size - len_old;
   //printf("left: %ld; right: %ld\n", len_old, len_new);
+  swap(present.p, present_bitmap_len, present_bitmap_len); 
   swap(data.p, len_old, len_new);
   //printhex(data.p, data.size);
 }

@@ -22,6 +22,9 @@ void print_error_msg(Result result)
   case BU_EVENT_TOO_BIG:
     fprintf(stderr, "binlog event too big\n");
     break;
+  case BU_NOT_FULL_ROW_IMAGE:
+    fprintf(stderr, "not full row image\n");
+    break;
   default:
     fprintf(stderr, "unknown error\n");
     break;

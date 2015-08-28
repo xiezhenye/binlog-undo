@@ -36,7 +36,8 @@ typedef enum Result {
   BU_IO_ERROR = 3,
   BU_CORRUPT_EVENT = 4,
   BU_UNEXCEPTED_EVENT_TYPE = 5,
-  BU_EVENT_TOO_BIG = 6
+  BU_EVENT_TOO_BIG = 6,
+  BU_NOT_FULL_ROW_IMAGE = 7
 } Result;
 
 //unsigned long get_field_length(unsigned char **packet);
@@ -92,8 +93,8 @@ public:
   Result revert_row_data(Table_map_event *table_map);
   void rewrite_checksum();
   Slice calc_rows_body_slice();
-  Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *slice);
-  void swap_update_row(Slice data, uint32_t num_col, Table_map_event *table_map); 
+  Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice);
+  void swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map); 
   void swap(char *str, size_t first, size_t second);
 
   void set_server_id(uint32_t server_id);
