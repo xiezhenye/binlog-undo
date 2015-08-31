@@ -93,7 +93,7 @@ public:
   Result revert_row_data(Table_map_event *table_map);
   void rewrite_checksum();
   Slice calc_rows_body_slice();
-  Result calc_update_data(Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice);
+  Result calc_row_data(Log_event_type event_type, Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice);
   void swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map); 
   void swap(char *str, size_t first, size_t second);
 

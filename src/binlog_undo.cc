@@ -276,6 +276,14 @@ Result BinlogUndo::copy_event_data(Event e)
 
 Result BinlogUndo::revert_row_data(Table_map_event *table_map)
 {
+  Slice sl = calc_rows_body_slice();
+  //printf("sz:%ld\n", sl.size);
+  Slice dt_sl;
+  uint32_t col_num;
+  Slice mp_sl;
+  Result result = calc_row_data(current_header.type_code, sl, &col_num, &mp_sl, &dt_sl);
+  ASSERT_BU_OK(result);
+
   if (current_header.type_code == WRITE_ROWS_EVENT) {
     event_buffer[EVENT_TYPE_OFFSET] = DELETE_ROWS_EVENT;
   }
@@ -283,14 +291,6 @@ Result BinlogUndo::revert_row_data(Table_map_event *table_map)
     event_buffer[EVENT_TYPE_OFFSET] = WRITE_ROWS_EVENT;
   }
   else if (current_header.type_code == UPDATE_ROWS_EVENT) {
-    Slice sl = calc_rows_body_slice();
-    //printf("sz:%ld\n", sl.size);
-    Slice dt_sl;
-    uint32_t col_num;
-    Slice mp_sl;
-    Result result = calc_update_data(sl, &col_num, &mp_sl, &dt_sl);
-    ASSERT_BU_OK(result);
-    //printf("col_num: %d data.size: %ld\n", col_num, dt_sl.size);
     swap_update_row(mp_sl, dt_sl, col_num, table_map);
   }
   else {
@@ -355,14 +355,16 @@ Slice BinlogUndo::calc_rows_body_slice()
   return { p:ptr_data, size:data_size };
 }
 
-Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice)
+Result BinlogUndo::calc_row_data(Log_event_type event_type, Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice)
 {
   char *pos = body.p; // copy a point, as get_field_length will change it
   *number_of_fields = (uint32_t)get_field_length((unsigned char**)&pos);
   // number_of_fields > 4096
   uint32_t bitmap_len = (*number_of_fields+7)/8;
-   
-  for (size_t i = 0; i < bitmap_len*2; ++i) {
+  if (event_type == UPDATE_ROWS_EVENT) {
+    bitmap_len*= 2;
+  }
+  for (size_t i = 0; i < bitmap_len; ++i) {
     if (pos[i] != '\xff') {
       //printf("b[%ld] %d\n", i, pos[i]);
       return BU_NOT_FULL_ROW_IMAGE;
@@ -370,8 +372,8 @@ Result BinlogUndo::calc_update_data(Slice body, uint32_t *number_of_fields, Slic
   }
   *field_bitset_slice = { p: pos, size: bitmap_len };
   *data_slice = {
-    p:    pos + bitmap_len*2, 
-    size: body.size - (pos-body.p) - bitmap_len*2
+    p:    pos + bitmap_len, 
+    size: body.size - (pos-body.p) - bitmap_len
   };
   return BU_OK;
 }
