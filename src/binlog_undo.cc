@@ -67,12 +67,10 @@ Result BinlogUndo::read_fde()
   //printf("%d %lu %lld\n", current_header.type_code, current_header.data_written, current_header.log_pos);
   Result result = read_event_body();
   ASSERT_BU_OK(result);
-  //Format_description_event *tmp = de;
-  Format_description_event *tmp = new Format_description_event(3, "");
-  fde = new Format_description_event(event_buffer, current_header.data_written, tmp);
+  Format_description_event tmp(3, "");
+  fde = new Format_description_event(event_buffer, current_header.data_written, &tmp);
   fde->footer()->checksum_alg = fde->footer()->get_checksum_alg(event_buffer, current_header.data_written);
   has_checksum = (fde->footer()->checksum_alg == BINLOG_CHECKSUM_ALG_CRC32);
-  delete tmp;
   return BU_OK;
 }
 
@@ -319,6 +317,9 @@ Result BinlogUndo::read_event_header_at(size_t pos)
 
 void BinlogUndo::rewrite_checksum() 
 {
+  if (!has_checksum) {
+    return;
+  }
   uint32_t checksum;
   checksum = checksum_crc32(0L, NULL, 0);
   checksum = checksum_crc32(checksum,
