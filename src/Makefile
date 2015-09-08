@@ -24,5 +24,12 @@ binlog_undo:main.o binlog_undo.o $(LIBBINLOGSTANDALONE) $(LIBMYSQLCLIENT)
           -lboost_program_options \
           -o binlog_undo 
 
+zip:binlog_undo
+	mkdir -p binlog_undo.x86_64.linux
+	cp binlog_undo ../README.md ../LICENSE binlog_undo.x86_64.linux
+	zip -r binlog_undo.x86_64.linux.zip binlog_undo.x86_64.linux
+	rm -rf binlog_undo.x86_64.linux
+
 clean:
-	rm binlog_undo binlog_undo.o main.o
+	rm -rf binlog_undo binlog_undo.o main.o binlog_undo.x86_64.linux 
+
