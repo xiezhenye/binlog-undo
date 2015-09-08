@@ -10,6 +10,10 @@ ARCH=$(shell uname -ms|tr '[:upper:] ' '[:lower:].')
 all:binlog_undo
 .PHONY : all
 
+
+zip:binlog_undo.$(ARCH).zip
+.PHONY : all
+
 binlog_undo.o:binlog_undo.cc binlog_undo.h
 	g++ $(INCLUDES) binlog_undo.cc -c -std=c++11 -g -O2 -Wall -o binlog_undo.o
 
@@ -24,7 +28,7 @@ binlog_undo:main.o binlog_undo.o $(LIBBINLOGSTANDALONE) $(LIBMYSQLCLIENT)
           -lboost_program_options \
           -o binlog_undo 
 
-zip:binlog_undo
+binlog_undo.$(ARCH).zip:binlog_undo ../README.md ../LICENSE
 	mkdir -p binlog_undo.$(ARCH)
 	cp binlog_undo ../README.md ../LICENSE binlog_undo.$(ARCH)
 	zip -r binlog_undo.$(ARCH).zip binlog_undo.$(ARCH)
