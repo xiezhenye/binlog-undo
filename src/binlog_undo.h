@@ -27,7 +27,6 @@ typedef struct Slice {
   size_t size;
 } Slice;
 
-static char magic[]= {'\xfe', '\x62', '\x69', '\x6e', '\x00'};
 
 typedef enum Result {
   BU_OK = 0,
@@ -60,10 +59,10 @@ public:
   
   char *event_buffer;
   //char *swap_buffer;
-  Format_description_event *fde = NULL;
+  Format_description_event *fde;
   bool has_checksum;
-  bool is_rewrite_server_id = false;
-  uint32_t server_id = 0;
+  bool is_rewrite_server_id;
+  uint32_t server_id;
   size_t current_event_pos;
   size_t current_event_len;
   Log_event_header current_header;

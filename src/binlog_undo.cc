@@ -7,10 +7,10 @@
 #include "binlog_undo.h"
 using namespace binary_log;
 
+static char magic[]= {'\xfe', '\x62', '\x69', '\x6e', '\x00'};
 
 void printhex(char *p, size_t n)
 {
-  uint8_t c;
   for (size_t i = 0; i < n; ++i) {
     printf("%02x ", (uint8_t)(p[i]));
   }
@@ -20,10 +20,12 @@ void printhex(char *p, size_t n)
 BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
   in_fd(in_fd),out_fd(out_fd),
   max_event_size(max_event_size * 1048576),
+  fde(NULL),
   has_checksum(false),
+  is_rewrite_server_id(false),
+  server_id(0),
   current_event_pos(0),
-  current_event_len(0),
-  fde(NULL)
+  current_event_len(0)
 {
   event_buffer = new char[this->max_event_size];
   //swap_buffer = new char[this->max_event_size];
@@ -260,7 +262,7 @@ Result BinlogUndo::write_event_data(Event e)
 {
   rewrite_server_id();
   rewrite_checksum(); 
-  int n = fwrite(event_buffer, sizeof(char), e.size, out_fd);
+  size_t n = fwrite(event_buffer, sizeof(char), e.size, out_fd);
   if (n != e.size) {
     return BU_IO_ERROR;
   }
@@ -391,7 +393,7 @@ void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Ta
   int present_bitmap_len = (num_col+7)/8; 
   Bitset null_set(pos);
   int null_bit_num = 0;
-  for (int i = 0; i < num_col; ++i) {
+  for (uint32_t i = 0; i < num_col; ++i) {
     if (present_set.get(i)) {
       ++null_bit_num;
     }
@@ -399,7 +401,7 @@ void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Ta
   //uint32_t bitmap_len = (num_col+7)/8;
   pos+= (null_bit_num+7)/8;
   int null_i = -1;
-  for (int i = 0; i < num_col; ++i) {
+  for (uint32_t i = 0; i < num_col; ++i) {
     //printf("col: %d %d %d\n", i, table_map->m_coltype[i], present_set.get(i));
     if (!present_set.get(i)) {
       continue;
@@ -436,12 +438,12 @@ void BinlogUndo::swap(char *str, size_t first, size_t second)
   }
   gcd = b;
   char t1, t2;
-  int step = len/gcd;
-  for (int i = 0; i < gcd; ++i) {
-    int p1 = i;
+  size_t step = len/gcd;
+  for (uint32_t i = 0; i < gcd; ++i) {
+    size_t p1 = i;
     t1 = str[p1];
-    for (int j = 0; j < step; ++j) {
-      int p2 = p1 + second;
+    for (uint32_t j = 0; j < step; ++j) {
+      size_t p2 = p1 + second;
       if (p2 >= len) {
         p2-= len;
       }
