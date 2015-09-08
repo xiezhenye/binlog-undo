@@ -6,7 +6,7 @@ INCLUDES=-I$(LIB_BINLOG)/include -I$(LIB_BINLOG)/export
 
 LIBBINLOGSTANDALONE=$(MYSQL_SRC)/libbinlogstandalone/lib/libbinlogstandalone.a
 LIBMYSQLCLIENT=$(LIB_MYSQL)/libmysqlclient.a
-
+ARCH=$(shell uname -ms|tr '[:upper:] ' '[:lower:].')
 all:binlog_undo
 .PHONY : all
 
@@ -25,11 +25,11 @@ binlog_undo:main.o binlog_undo.o $(LIBBINLOGSTANDALONE) $(LIBMYSQLCLIENT)
           -o binlog_undo 
 
 zip:binlog_undo
-	mkdir -p binlog_undo.x86_64.linux
-	cp binlog_undo ../README.md ../LICENSE binlog_undo.x86_64.linux
-	zip -r binlog_undo.x86_64.linux.zip binlog_undo.x86_64.linux
-	rm -rf binlog_undo.x86_64.linux
+	mkdir -p binlog_undo.$(ARCH)
+	cp binlog_undo ../README.md ../LICENSE binlog_undo.$(ARCH)
+	zip -r binlog_undo.$(ARCH).zip binlog_undo.$(ARCH)
+	rm -rf binlog_undo.$(ARCH)
 
 clean:
-	rm -rf binlog_undo binlog_undo.o main.o binlog_undo.x86_64.linux 
+	rm -rf binlog_undo binlog_undo.o main.o binlog_undo.$(ARCH) binlog_undo.$(ARCH).zip 
 
