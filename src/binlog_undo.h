@@ -37,7 +37,8 @@ typedef enum Result {
   BU_CORRUPT_EVENT = 4,
   BU_UNEXCEPTED_EVENT_TYPE = 5,
   BU_EVENT_TOO_BIG = 6,
-  BU_NOT_FULL_ROW_IMAGE = 7
+  BU_NOT_FULL_ROW_IMAGE = 7,
+  BU_NO_TRANSACTIONS=8
 } Result;
 
 //unsigned long get_field_length(unsigned char **packet);
@@ -97,6 +98,7 @@ public:
   void swap(char *str, size_t first, size_t second);
 
   void set_server_id(uint32_t server_id);
+  void set_quiet(bool quiet);
   void rewrite_server_id();
   void log(const char* format, ...);
 };

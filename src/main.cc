@@ -25,6 +25,9 @@ void print_error_msg(Result result)
   case BU_NOT_FULL_ROW_IMAGE:
     fprintf(stderr, "not full row image\n");
     break;
+  case BU_NO_TRANSACTIONS:
+    fprintf(stderr, "no transactions to undo\n");
+    break;
   default:
     fprintf(stderr, "unknown error\n");
     break;
@@ -75,6 +78,7 @@ int main(int argc, char** argv) {
   //printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
   BinlogUndo undo(in_fd, out_fd, max_event_size);
   undo.set_server_id(server_id);
+  undo.set_quiet(quiet);
   Result result = undo.scan(pos);
   int ret = 0;
   if (result) {
@@ -88,8 +92,8 @@ int main(int argc, char** argv) {
       if (!quiet) {
         print_error_msg(result);
       }
+      ret = result + 10;
     }
-    ret = result + 10;
   }
   fclose(in_fd);
   fclose(out_fd);  

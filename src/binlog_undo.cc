@@ -190,6 +190,9 @@ Result BinlogUndo::scan(size_t pos)
     } // rows
     ++n_trans;   
   } // transactions
+  if (n_trans == 0) {
+    return BU_NO_TRANSACTIONS;
+  }
   log("transactions to undo: %u\n", n_trans);
   return BU_OK;
 }
@@ -504,8 +507,12 @@ void BinlogUndo::log(const char* format, ...) {
     return;
   }
   va_list args;
+  va_start(args, format);
   vprintf(format, args);
   va_end(args);
 }
 
+void BinlogUndo::set_quiet(bool quiet) {
+  this->quiet = quiet;
+}
 
