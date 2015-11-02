@@ -1,5 +1,6 @@
 #include <vector>
 #define STANDALONE_BINLOG
+#include <stdarg.h>
 #include "binary_log.h"
 
 namespace binary_log 
@@ -58,17 +59,16 @@ public:
   size_t max_event_size;
   
   char *event_buffer;
-  //char *swap_buffer;
+  char *swap_buffer;
   Format_description_event *fde;
   bool has_checksum;
   bool is_rewrite_server_id;
+  bool quiet;
   uint32_t server_id;
   size_t current_event_pos;
   size_t current_event_len;
   Log_event_header current_header;
-
   std::vector<Trans> transactions;
-
 public:  
   BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size);
   ~BinlogUndo();
@@ -98,7 +98,9 @@ public:
 
   void set_server_id(uint32_t server_id);
   void rewrite_server_id();
+  void log(const char* format, ...);
 };
+
 
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 

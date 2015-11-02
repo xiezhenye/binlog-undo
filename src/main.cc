@@ -38,12 +38,14 @@ int main(int argc, char** argv) {
   size_t pos;
   size_t max_event_size;
   uint32_t server_id = UINT_MAX;
+  bool quiet = false;
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help,h", "print help message")
-    ("file,f", po::value<std::string>(&in_path)->required(), "binlog file")
-    ("position,p", po::value<size_t>(&pos)->required(), "position")
-    ("output,o", po::value<std::string>(&out_path)->required(), "output file")
+    ("file,f", po::value<std::string>(&in_path)->required(), "binlog file (required)")
+    ("position,p", po::value<size_t>(&pos)->required(), "position (required)")
+    ("output,o", po::value<std::string>(&out_path)->required(), "output file (required)")
+    ("quiet,q", po::bool_switch()->default_value(false), "be quiet")
     ("max-event-size,m", po::value<size_t>(&max_event_size)->default_value(16), "max binlog event size (MB)")
     ("server-id,s", po::value<uint32_t>(&server_id), "rewrite the specialized server id");
     ;
@@ -60,7 +62,7 @@ int main(int argc, char** argv) {
     std::cout << desc << std::endl;
     return 0;
   }
-
+  quiet = vm["quiet"].as<bool>();
   FILE* in_fd = fopen(in_path.c_str(), "r");
   if (!in_fd) {
     return 2;
@@ -73,17 +75,22 @@ int main(int argc, char** argv) {
   //printf("%s %ld > %s\n", in_path.c_str(), pos, out_path.c_str());
   BinlogUndo undo(in_fd, out_fd, max_event_size);
   undo.set_server_id(server_id);
-  Result ret = undo.scan(pos);
-  if (ret) {
-    print_error_msg(ret);
-    return ret + 10;
+  Result result = undo.scan(pos);
+  int ret = 0;
+  if (result) {
+    if (!quiet) {
+      print_error_msg(result);
+    }
+    ret = result + 10;
+  } else {
+    result = undo.output();
+    if (result) {
+      if (!quiet) {
+        print_error_msg(result);
+      }
+    }
+    ret = result + 10;
   }
-  ret = undo.output();
-  if (ret) {
-    print_error_msg(ret);
-    return ret + 10;
-  }
-
   fclose(in_fd);
   fclose(out_fd);  
   return ret;

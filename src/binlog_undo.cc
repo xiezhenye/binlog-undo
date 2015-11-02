@@ -1,6 +1,7 @@
 #include <vector>
 #include <cstdint>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 //#include <endian.h>
 
@@ -28,13 +29,13 @@ BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
   current_event_len(0)
 {
   event_buffer = new char[this->max_event_size];
-  //swap_buffer = new char[this->max_event_size];
+  swap_buffer = new char[this->max_event_size];
 } 
 
 BinlogUndo::~BinlogUndo()
 {
   delete event_buffer;
-  //delete swap_buffer;
+  delete swap_buffer;
   delete fde;
 }
 
@@ -171,7 +172,7 @@ Result BinlogUndo::scan(size_t pos)
   //printf("\n");
   current_event_pos = pos;
   fseek(in_fd, pos, SEEK_SET);
-  
+  uint32_t n_trans = 0; 
   while (true) {
     result = scan_begin();
     if (result != BU_OK) {
@@ -187,7 +188,9 @@ Result BinlogUndo::scan(size_t pos)
       }
       ASSERT_BU_OK(result);
     } // rows
+    ++n_trans;   
   } // transactions
+  log("transactions to undo: %u\n", n_trans);
   return BU_OK;
 }
 
@@ -427,9 +430,10 @@ void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Ta
 void BinlogUndo::swap(char *str, size_t first, size_t second)
 {
   //printhex(str, first+second);
-  //memcpy(swap_buffer, str, first);
-  //memcpy(str, str + first, second);
-  //memcpy(str + second, swap_buffer, first);
+  memcpy(swap_buffer, str, first);
+  memcpy(str, str + first, second);
+  memcpy(str + second, swap_buffer, first);
+  /*
   size_t gcd;
   size_t a = first, b = second, c = 0;
   size_t len = first+second;
@@ -453,6 +457,7 @@ void BinlogUndo::swap(char *str, size_t first, size_t second)
       p1 = p2;
     }
   }
+  */
   //printhex(str, first+second);
 }
 
@@ -493,4 +498,14 @@ size_t get_type_size(char type)
   }
   //TODO: add all other types for safety
 }
+
+void BinlogUndo::log(const char* format, ...) {
+  if (quiet) {
+    return;
+  }
+  va_list args;
+  vprintf(format, args);
+  va_end(args);
+}
+
 
