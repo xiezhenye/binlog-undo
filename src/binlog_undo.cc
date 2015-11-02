@@ -1,5 +1,5 @@
 #include <vector>
-
+#include <cstdint>
 #include <stdio.h>
 #include <string.h>
 //#include <endian.h>
@@ -135,7 +135,7 @@ Result BinlogUndo::scan_row_or_xid()
       return BU_EVENT_TOO_BIG;
     }
     //printf("TABLE_MAP\n");
-    transactions.back().rows.push_back({
+    transactions.back().rows.push_back(Event{
       current_event_pos,
       current_header.data_written
     });
