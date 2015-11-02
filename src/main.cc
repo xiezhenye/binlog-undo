@@ -68,10 +68,16 @@ int main(int argc, char** argv) {
   quiet = vm["quiet"].as<bool>();
   FILE* in_fd = fopen(in_path.c_str(), "r");
   if (!in_fd) {
+    if (!quiet) {
+      fprintf(stderr, "can not open input file\n");
+    }
     return 2;
   }
   FILE* out_fd = fopen(out_path.c_str(), "w");
   if (!out_fd) {
+    if (!quiet) {
+      fprintf(stderr, "can not open output file\n");
+    }
     return 3;
   }
 
