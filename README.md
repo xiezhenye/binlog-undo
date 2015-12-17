@@ -5,6 +5,8 @@ This utility scans the binlog from specialized position to end and produces anot
 
 Only supports row format binlog.
 
+You can get binary releases for linux x86_64 here: https://github.com/xiezhenye/binlog-undo/releases
+
 # build
 ## requirement
  * MySQL source code version >= 5.7
