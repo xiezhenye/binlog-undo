@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     ("output,o", po::value<std::string>(&out_path)->required(), "output file (required)")
     ("quiet,q", po::bool_switch()->default_value(false), "be quiet")
     ("max-event-size,m", po::value<size_t>(&max_event_size)->default_value(16), "max binlog event size (MB)")
-    ("server-id,s", po::value<uint32_t>(&server_id), "rewrite the specialized server id");
+    ("server-id,s", po::value<uint32_t>(&server_id), "rewrite server id");
     ;
 	
   po::variables_map vm;
@@ -85,6 +85,9 @@ int main(int argc, char** argv) {
   BinlogUndo undo(in_fd, out_fd, max_event_size);
   undo.set_server_id(server_id);
   undo.set_quiet(quiet);
+  if (!quiet) {
+    printf("scanning events\n");
+  }
   Result result = undo.scan(pos);
   int ret = 0;
   if (result) {

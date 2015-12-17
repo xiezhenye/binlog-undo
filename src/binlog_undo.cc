@@ -10,6 +10,50 @@ using namespace binary_log;
 
 static char magic[]= {'\xfe', '\x62', '\x69', '\x6e', '\x00'};
 
+
+static const char *event_names[ENUM_END_EVENT] = {
+"UNKNOWN_EVENT",
+"START_EVENT_V3",
+"QUERY_EVENT",
+"STOP_EVENT",
+"ROTATE_EVENT",
+"INTVAR_EVENT",
+"LOAD_EVENT",
+"SLAVE_EVENT",
+"CREATE_FILE_EVENT",
+"APPEND_BLOCK_EVENT",
+"EXEC_LOAD_EVENT",
+"DELETE_FILE_EVENT",
+"NEW_LOAD_EVENT",
+"RAND_EVENT",
+"USER_VAR_EVENT",
+"FORMAT_DESCRIPTION_EVENT",
+"XID_EVENT",
+"BEGIN_LOAD_QUERY_EVENT",
+"EXECUTE_LOAD_QUERY_EVENT",
+"TABLE_MAP_EVENT",
+"PRE_GA_WRITE_ROWS_EVENT",
+"PRE_GA_UPDATE_ROWS_EVENT",
+"PRE_GA_DELETE_ROWS_EVENT",
+"WRITE_ROWS_EVENT_V1",
+"UPDATE_ROWS_EVENT_V1",
+"DELETE_ROWS_EVENT_V1",
+"INCIDENT_EVENT",
+"HEARTBEAT_LOG_EVENT",
+"IGNORABLE_LOG_EVENT",
+"ROWS_QUERY_LOG_EVENT",
+"WRITE_ROWS_EVENT",
+"UPDATE_ROWS_EVENT",
+"DELETE_ROWS_EVENT",
+"GTID_LOG_EVENT",
+"ANONYMOUS_GTID_LOG_EVENT",
+"PREVIOUS_GTIDS_LOG_EVENT",
+"TRANSACTION_CONTEXT_EVENT",
+"VIEW_CHANGE_EVENT",
+"XA_PREPARE_LOG_EVENT"
+};
+
+
 void printhex(char *p, size_t n)
 {
   for (size_t i = 0; i < n; ++i) {
@@ -49,20 +93,34 @@ Result BinlogUndo::read_event_header()
     return BU_IO_ERROR;
   }
   new (&current_header)Log_event_header(event_buffer, BINLOG_VERSION);
-  if (current_header.log_pos - current_header.data_written != current_event_pos) {
+  if (!quiet) {
+    unsigned int tmp_type_code = current_header.type_code;
+    if (tmp_type_code >= ENUM_END_EVENT || tmp_type_code < 0) {
+      tmp_type_code = 0;
+    }
+    printf("@%lu %s(%d) size: %lu; next pos: %llu\n", 
+      current_event_pos,
+      event_names[tmp_type_code], 
+      current_header.type_code,
+      current_header.data_written,
+      current_header.log_pos);
+  }
+  if (current_header.type_code >= ENUM_END_EVENT ||
+       current_header.type_code <= 0 ||
+       current_header.log_pos - current_header.data_written != current_event_pos) {
     return BU_CORRUPT_EVENT; 
   }
   current_event_len = current_header.data_written;
   if (has_checksum) {
     current_event_len-= BINLOG_CHECKSUM_LEN;
   }
-  //printf("%d %lu %lld\n", current_header.type_code, current_header.data_written, current_header.log_pos);
   return BU_OK;
 }
 
 Result BinlogUndo::read_fde()
 {
-  fseek(in_fd, BIN_LOG_HEADER_SIZE, SEEK_SET); 
+  current_event_pos = BIN_LOG_HEADER_SIZE;
+  fseek(in_fd, current_event_pos, SEEK_SET); 
   read_event_header();
   if (current_header.type_code != FORMAT_DESCRIPTION_EVENT) {
     return BU_UNEXCEPTED_EVENT_TYPE;
