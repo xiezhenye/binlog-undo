@@ -20,6 +20,7 @@ Allowed options:
     -f [ --file ] arg                 binlog file
     -p [ --position ] arg             position
     -o [ --output ] arg               output file
+    -q [ --quiet ]                    be quiet
     -m [ --max-event-size ] arg (=16) max binlog event size (MB)
     -s [ --server-id ] arg            rewrite the specialized server id
 
