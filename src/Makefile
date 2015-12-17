@@ -21,7 +21,7 @@ binlog_undo.o:binlog_undo.cc binlog_undo.h
 	g++ $(INCLUDES) binlog_undo.cc -c -std=$(CPP11) -g -O2 -Wall -o binlog_undo.o
 
 main.o:main.cc binlog_undo.h
-	g++ $(INCLUDES) main.cc -c -std=c++0x -O2 -g -Wall -o main.o
+	g++ $(INCLUDES) main.cc -c -std=$(CPP11) -O2 -g -Wall -o main.o
 
 binlog_undo:main.o binlog_undo.o $(LIBBINLOGSTANDALONE) $(LIBMYSQLCLIENT)
 	g++ binlog_undo.o main.o \
