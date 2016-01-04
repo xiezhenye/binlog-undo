@@ -1,10 +1,14 @@
 #include <vector>
+
 #define STANDALONE_BINLOG
+
 #include <stdarg.h>
 #include "binary_log.h"
+#include "binary_log_funcs.h"
 
 namespace binary_log 
 {
+  // implemented in <MYSQL SRC>/libbinlogevents/src/rows_event.cpp
   unsigned long get_field_length(unsigned char **packet);
 }
 
@@ -94,7 +98,7 @@ public:
   void rewrite_checksum();
   Slice calc_rows_body_slice();
   Result calc_row_data(Log_event_type event_type, Slice body, uint32_t *number_of_fields, Slice *field_bitset_slice, Slice *data_slice);
-  void swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map); 
+  Result swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map); 
   void swap(char *str, size_t first, size_t second);
 
   void set_server_id(uint32_t server_id);
@@ -103,6 +107,7 @@ public:
   void log(const char* format, ...);
 };
 
+void fill_metadata(Table_map_event *table_map,  uint16_t *metadata_out);
 
 #define ASSERT_BU_OK(r) if((r)!=BU_OK){return r;}
 

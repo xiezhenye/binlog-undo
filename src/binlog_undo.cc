@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-//#include <endian.h>
 
 #include "binlog_undo.h"
+
 using namespace binary_log;
 
 static char magic[]= {'\xfe', '\x62', '\x69', '\x6e', '\x00'};
@@ -78,9 +78,9 @@ BinlogUndo::BinlogUndo(FILE *in_fd, FILE *out_fd, size_t max_event_size):
 
 BinlogUndo::~BinlogUndo()
 {
+  delete fde;
   delete event_buffer;
   delete swap_buffer;
-  delete fde;
 }
 
 Result BinlogUndo::read_event_header()
@@ -154,7 +154,7 @@ Result BinlogUndo::scan_begin()
   Result result;
   result = read_event_header();
   ASSERT_BU_OK(result);
-  if (current_header.type_code == GTID_LOG_EVENT) {
+  if (current_header.type_code == GTID_LOG_EVENT || current_header.type_code == ANONYMOUS_GTID_LOG_EVENT) {
     result = read_event_header_at(current_header.log_pos);
     ASSERT_BU_OK(result);
   }
@@ -357,7 +357,8 @@ Result BinlogUndo::revert_row_data(Table_map_event *table_map)
     event_buffer[EVENT_TYPE_OFFSET] = WRITE_ROWS_EVENT;
   }
   else if (current_header.type_code == UPDATE_ROWS_EVENT) {
-    swap_update_row(mp_sl, dt_sl, col_num, table_map);
+    result = swap_update_row(mp_sl, dt_sl, col_num, table_map);
+    ASSERT_BU_OK(result)
   }
   else {
     return BU_UNEXCEPTED_EVENT_TYPE;
@@ -445,12 +446,13 @@ Result BinlogUndo::calc_row_data(Log_event_type event_type, Slice body, uint32_t
 }
 
 
-void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map) 
+Result BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Table_map_event *table_map) 
 {
   if (table_map->m_colcnt != num_col) {
-    return; /////
+    return BU_CORRUPT_EVENT;
   }
   //printhex(data.p, data.size);
+  //printf("%ld\n", data.size);
   char *pos = data.p;
   //printf("bits:%d\n", 0xffff&(*(short*)pos));
   Bitset present_set(present.p);
@@ -461,7 +463,10 @@ void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Ta
     if (present_set.get(i)) {
       ++null_bit_num;
     }
-  }
+  } 
+  uint16_t field_metadata[num_col];
+  fill_metadata(table_map, field_metadata); 
+  //printhex((char *)field_metadata, num_col * sizeof(uint16_t));
   //uint32_t bitmap_len = (num_col+7)/8;
   pos+= (null_bit_num+7)/8;
   int null_i = -1;
@@ -474,17 +479,21 @@ void BinlogUndo::swap_update_row(Slice present, Slice data, uint32_t num_col, Ta
     if (null_set.get(null_i)) {
       continue;
     }
-    size_t field_size = get_type_size(table_map->m_coltype[i]);
-    if (field_size == 0) {
-      field_size = get_field_length((unsigned char**)(&pos)); //get_field_length will move the point to the posision after the leint.
-    }
+    //printf("type: %d\n", table_map->m_coltype[i]);
+    size_t field_size = calc_field_size((uint8_t)(table_map->m_coltype[i]), (uint8_t*)pos, field_metadata[i]);
+
+    //printf("fs: %lu\n", field_size);
     pos+= field_size;
   }
   size_t len_old = pos - data.p;
   size_t len_new = data.size - len_old;
+  if (len_old + len_new > data.size) {
+    return BU_CORRUPT_EVENT;
+  }
   //printf("left: %ld; right: %ld\n", len_old, len_new);
   swap(present.p, present_bitmap_len, present_bitmap_len); 
   swap(data.p, len_old, len_new);
+  return BU_OK;
   //printhex(data.p, data.size);
 }
 
@@ -539,27 +548,6 @@ bool Bitset::get(size_t n)
   return ((*ptr) & v) != 0;
 }
 
-size_t get_type_size(char type)
-{
-  switch(type){
-  case MYSQL_TYPE_TINY:
-    return 1;
-  case MYSQL_TYPE_SHORT:
-  case MYSQL_TYPE_YEAR:
-    return 2;
-  case MYSQL_TYPE_FLOAT:
-  case MYSQL_TYPE_LONG:
-  case MYSQL_TYPE_INT24:
-    return 4;
-  case MYSQL_TYPE_DOUBLE:
-  case MYSQL_TYPE_LONGLONG:
-    return 8;
-  default:
-    return 0;
-  }
-  //TODO: add all other types for safety
-}
-
 void BinlogUndo::log(const char* format, ...) {
   if (quiet) {
     return;
@@ -572,5 +560,77 @@ void BinlogUndo::log(const char* format, ...) {
 
 void BinlogUndo::set_quiet(bool quiet) {
   this->quiet = quiet;
+}
+
+// copied from <MYSQL_SRC>/include/byte_order_generic_x86.h
+static inline uint16_t uint2korr(const unsigned char *A) { return *((uint16_t*) A); }
+
+void fill_metadata(Table_map_event *table_map,  uint16_t *metadata_out) {
+  if (table_map->m_colcnt == 0 || table_map->m_field_metadata_size == 0) {
+    return;
+  }
+  int index= 0;
+  for (unsigned int i= 0; i < table_map->m_colcnt; i++) {
+    switch (table_map->m_coltype[i]) {
+    case MYSQL_TYPE_TINY_BLOB:
+    case MYSQL_TYPE_BLOB:
+    case MYSQL_TYPE_MEDIUM_BLOB:
+    case MYSQL_TYPE_LONG_BLOB:
+    case MYSQL_TYPE_DOUBLE:
+    case MYSQL_TYPE_FLOAT:
+    case MYSQL_TYPE_GEOMETRY:
+    case MYSQL_TYPE_JSON:
+    {
+      /*
+        These types store a single byte.
+      */
+      metadata_out[i]= table_map->m_field_metadata[index];
+      index++;
+      break;
+    }
+    case MYSQL_TYPE_SET:
+    case MYSQL_TYPE_ENUM:
+    case MYSQL_TYPE_STRING:
+    {
+      uint16_t x= table_map->m_field_metadata[index++] << 8U; // real_type
+      x+= table_map->m_field_metadata[index++];            // pack or field length
+      metadata_out[i]= x;
+      break;
+    }
+    case MYSQL_TYPE_BIT:
+    {
+      uint16_t x= table_map->m_field_metadata[index++];
+      x = x + (table_map->m_field_metadata[index++] << 8U);
+      metadata_out[i]= x;
+      break;
+    }
+    case MYSQL_TYPE_VARCHAR:
+    {
+      /*
+        These types store two bytes.
+      */
+      unsigned char *ptr= &table_map->m_field_metadata[index];
+      metadata_out[i]= uint2korr(ptr);
+      index= index + 2;
+      break;
+    }
+    case MYSQL_TYPE_NEWDECIMAL:
+    {
+      uint16_t x= table_map->m_field_metadata[index++] << 8U; // precision
+      x+= table_map->m_field_metadata[index++];            // decimals
+      metadata_out[i]= x;
+      break;
+    }
+    case MYSQL_TYPE_TIME2:
+    case MYSQL_TYPE_DATETIME2:
+    case MYSQL_TYPE_TIMESTAMP2:
+      metadata_out[i]= table_map->m_field_metadata[index++];
+      break;
+    default:
+      metadata_out[i]= 0;
+      break;
+    }
+    //printf("md: %d\n", metadata_out[i]);
+  }
 }
 
